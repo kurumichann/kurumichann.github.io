@@ -10,7 +10,7 @@
     
     
     
-    <title>Hello World | kurumi の　ブログ</title>
+    <title>分布式锁实现方式比较 | kurumi の　ブログ</title>
     <link href="”http://yoursite.com“" rel="”prefetch”">
 
     <link rel="stylesheet" href="/css/bootstrap.min.css">
@@ -160,19 +160,19 @@
         <i class="fa fa-home"></i>
         <a href="http://yoursite.com">kurumi の　ブログ</a>
         >
-        <span>Hello World</span>
+        <span>分布式锁实现方式比较</span>
     </div>
     <!-- 大型设备详细文章 -->
     <div class="hidden-xs">
         <div class="title-article">
             <h1>
-                <a href="/2018/11/08/hello-world/">Hello World</a>
+                <a href="/2018/11/27/分布式锁实现方式比较/">分布式锁实现方式比较</a>
             </h1>
         </div>
         <div class="tag-article">
             
             <span class="label label-gal">
-                <i class="fa fa-calendar"></i> 2018-11-08
+                <i class="fa fa-calendar"></i> 2018-11-27
             </span>
             
         </div>
@@ -182,11 +182,11 @@
         <center>
             <div class="title-article">
                 <h4>
-                    <a href="/2018/11/08/hello-world/">Hello World</a>
+                    <a href="/2018/11/27/分布式锁实现方式比较/">分布式锁实现方式比较</a>
                 </h4>
             </div>
             <p>
-                <i class="fa fa-calendar"></i> 2018-11-08
+                <i class="fa fa-calendar"></i> 2018-11-27
             </p>
             <p>
                 
@@ -195,16 +195,21 @@
         </center>
     </div>
     <div class="content-article">
-        <p>Welcome to <a href="https://hexo.io/" target="_blank" rel="noopener">Hexo</a>! This is your very first post. Check <a href="https://hexo.io/docs/" target="_blank" rel="noopener">documentation</a> for more info. If you get any problems when using Hexo, you can find the answer in <a href="https://hexo.io/docs/troubleshooting.html" target="_blank" rel="noopener">troubleshooting</a> or you can ask me on <a href="https://github.com/hexojs/hexo/issues" target="_blank" rel="noopener">GitHub</a>.</p>
-<h2 id="Quick-Start"><a href="#Quick-Start" class="headerlink" title="Quick Start"></a>Quick Start</h2><h3 id="Create-a-new-post"><a href="#Create-a-new-post" class="headerlink" title="Create a new post"></a>Create a new post</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo new <span class="string">"My New Post"</span></span><br></pre></td></tr></table></figure>
-<p>More info: <a href="https://hexo.io/docs/writing.html" target="_blank" rel="noopener">Writing</a></p>
-<h3 id="Run-server"><a href="#Run-server" class="headerlink" title="Run server"></a>Run server</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo server</span><br></pre></td></tr></table></figure>
-<p>More info: <a href="https://hexo.io/docs/server.html" target="_blank" rel="noopener">Server</a></p>
-<h3 id="Generate-static-files"><a href="#Generate-static-files" class="headerlink" title="Generate static files"></a>Generate static files</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo generate</span><br></pre></td></tr></table></figure>
-<p>More info: <a href="https://hexo.io/docs/generating.html" target="_blank" rel="noopener">Generating</a></p>
-<h3 id="Deploy-to-remote-sites"><a href="#Deploy-to-remote-sites" class="headerlink" title="Deploy to remote sites"></a>Deploy to remote sites</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo deploy</span><br></pre></td></tr></table></figure>
-<p>More info: <a href="https://hexo.io/docs/deployment.html" target="_blank" rel="noopener">Deployment</a></p>
-
+        <blockquote>
+<p>写这个文章的原因是在面试阿里二面的过程中被问到过如何在不同机器（jvm）之间同步变量，当时对分布式锁不是很了解，就随便打了使用序列化传递对象，其实是答非所问。后来的工作学习中接触了分布式锁的不同实现，以及了解到在分布式系统中的应用，在此做个记录。</p>
+</blockquote>
+<h3 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h3><blockquote>
+<p>在单机程序中，我们如果要实现不同线程的变量同步，并发量不大的情况下可以使用乐观锁（unsafe的cas，sql中带版本号set操作），并发较大时可以使用悲观锁（lock，synchronize，sql中的行锁（select for update）以及表锁（串行））。对于分布式系统而言，由于已经是不同的jvm，jdk的锁方法无法起到作用，因此只能借助第三方的锁来实现两台机器中的同步操作。目前主流的分布式锁实现主要有三种，数据库存储锁，缓存数据库存储锁，zookeeper存储锁。</p>
+</blockquote>
+<h3 id="数据库存储锁"><a href="#数据库存储锁" class="headerlink" title="数据库存储锁"></a>数据库存储锁</h3><p>首先要把本文的应用于变量同步的数据库存储锁所与数据库事务锁区分开来，前者是通过多应用连接同一个数据库共享资源，后者是数据库的事务隔离级别。使用数据库进行变量同步有两种方式，</p>
+<h5 id="数据库锁竞争"><a href="#数据库锁竞争" class="headerlink" title="数据库锁竞争"></a>数据库锁竞争</h5><p>一种是在数据中显示地表达出某资源的持有人是谁，其他竞争者轮询这条记录，等待持有人使用资源完成任务后释放锁（更新记录，比如ower_id设为null），再进行锁竞争。<br>resource_id|owner_id<br>–|:–:<br>1|2|</p>
+<h5 id="在事务中锁定数据"><a href="#在事务中锁定数据" class="headerlink" title="在事务中锁定数据"></a>在事务中锁定数据</h5><p>这种同步方式和数据库事务锁有关，在数据库设置中将隔离级别设为repeatable-read，在事务中使用select for update语句后可以保证当前事务更新过程中其他事务无法更新同一列数据，可以用于不同机器中的变量累加计数。</p>
+<h5 id="使用数据库锁的优势与劣势"><a href="#使用数据库锁的优势与劣势" class="headerlink" title="使用数据库锁的优势与劣势"></a>使用数据库锁的优势与劣势</h5><ul>
+<li>掌握数据库是编程的基本技能之一，所以使用数据库来同步变量对于开发者而言实现简单，不用依赖其他中间件，开发者也会信赖从数据库层面保证的一致性。</li>
+<li>由于数据库是使用文件存储，变量同步的过程除了网络消耗，还有磁盘io的消耗，因此对于高频率同步的变量（比如秒杀，累加），同步消耗很会成为一个瓶颈，这种场景一般使用下一段提到的缓存数据库锁</li>
+</ul>
+<p>//TODU</p>
+<h3 id="缓存数据库存储锁"><a href="#缓存数据库存储锁" class="headerlink" title="缓存数据库存储锁"></a>缓存数据库存储锁</h3><h3 id="zookeeper实现的分布式锁"><a href="#zookeeper实现的分布式锁" class="headerlink" title="zookeeper实现的分布式锁"></a>zookeeper实现的分布式锁</h3>
     </div>
 </article>
 
@@ -310,13 +315,13 @@
         <div class="panel panel-gal hidden-xs" data-aos="fade-up" data-aos-duration="2000">
             <ul class="nav nav-pills pills-gal">
                 <li class="">
-                    <a href="/2018/11/08/hello-world/index.html#sidebar-tags" data-toggle="tab" id="tags-tab">热门标签</a>
+                    <a href="/2018/11/27/分布式锁实现方式比较/index.html#sidebar-tags" data-toggle="tab" id="tags-tab">热门标签</a>
                 </li>
                 <li class="">
-                    <a href="/2018/11/08/hello-world/index.html#sidebar-friend-links" data-toggle="tab" id="friend-links-tab">友情链接</a>
+                    <a href="/2018/11/27/分布式锁实现方式比较/index.html#sidebar-friend-links" data-toggle="tab" id="friend-links-tab">友情链接</a>
                 </li>
                 <li class="">
-                    <a href="/2018/11/08/hello-world/index.html#sidebar-links" data-toggle="tab" id="links-tab">个人链接</a>
+                    <a href="/2018/11/27/分布式锁实现方式比较/index.html#sidebar-links" data-toggle="tab" id="links-tab">个人链接</a>
                 </li>
             </ul>
             <div class="tab-content">
